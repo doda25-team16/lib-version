@@ -1,0 +1,95 @@
+name: Prerelease
+
+on:
+  push:
+    branches:
+      - '**'
+      - '!main'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  prerelease:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Generate prerelease version
+        run: |
+          # Read base version from pom.xml
+          BASE_VERSION=$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout)
+          
+          # Strip any existing -SNAPSHOT suffix
+          BASE_VERSION=${BASE_VERSION%-SNAPSHOT}
+          
+          # Sanitize branch name for version string (replace / with -)
+          BRANCH_NAME=$(echo "${{ github.ref_name }}" | sed 's/\//-/g' | sed 's/_/-/g')
+          
+          # Count commits on this branch (as build number)
+          BUILD_NUMBER=$(git rev-list --count HEAD)
+          
+          # Create prerelease version: base-SNAPSHOT-branch.buildnumber
+          PRERELEASE_VERSION="${BASE_VERSION}-SNAPSHOT-${BRANCH_NAME}.${BUILD_NUMBER}"
+          
+          echo "Base version: $BASE_VERSION"
+          echo "Branch: $BRANCH_NAME"
+          echo "Build number: $BUILD_NUMBER"
+          echo "Prerelease version: $PRERELEASE_VERSION"
+          
+          echo "PRERELEASE_VERSION=$PRERELEASE_VERSION" >> $GITHUB_ENV
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Update pom.xml with prerelease version
+        run: |
+          mvn -q versions:set -DnewVersion="${PRERELEASE_VERSION}" -DgenerateBackupPoms=false
+          echo "Updated pom.xml to version $PRERELEASE_VERSION"
+
+      - name: Build and test
+        run: mvn -B clean verify
+
+      - name: Publish to GitHub Packages
+        run: mvn -B deploy -DskipTests
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create prerelease tag
+        run: |
+          TAG_NAME="prerelease-${PRERELEASE_VERSION}"
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Prerelease
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: prerelease-${{ env.PRERELEASE_VERSION }}
+          name: Prerelease ${{ env.PRERELEASE_VERSION }}
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            **Prerelease build from branch `${{ env.BRANCH_NAME }}`**
+            
+            Version: `${{ env.PRERELEASE_VERSION }}`
+            Commit: ${{ github.sha }}
+            
+            This is an automated prerelease build. Use with caution.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
