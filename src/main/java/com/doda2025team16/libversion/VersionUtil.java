@@ -2,7 +2,7 @@
 package com.doda2025team16.libversion;
 
 import java.io.InputStream;
-import java.util.jar.Manifest;
+import java.util.Properties;
 
 public class VersionUtil {
     private static String version;
@@ -10,10 +10,12 @@ public class VersionUtil {
     public static String getVersion() {
         if (version != null) return version;
         
-        try (InputStream input = VersionUtil.class.getResourceAsStream("/META-INF/MANIFEST.MF")) {
+        try (InputStream input = VersionUtil.class.getResourceAsStream(
+                "/META-INF/maven/com.doda2025team16.libversion/lib-version/pom.properties")) {
             if (input != null) {
-                Manifest manifest = new Manifest(input);
-                version = manifest.getMainAttributes().getValue("Implementation-Version");
+                Properties props = new Properties();
+                props.load(input);
+                version = props.getProperty("version");
             } else {
                 version = "unknown";
             }
