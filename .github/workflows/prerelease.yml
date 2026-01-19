@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   prerelease:
+    if: startsWith(github.ref, 'refs/heads/')
     runs-on: ubuntu-latest
 
     steps:
@@ -78,18 +79,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Prerelease
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: prerelease-${{ env.PRERELEASE_VERSION }}
-          name: Prerelease ${{ env.PRERELEASE_VERSION }}
-          prerelease: true
-          generate_release_notes: true
-          body: |
-            **Prerelease build from branch `${{ env.BRANCH_NAME }}`**
-            
-            Version: `${{ env.PRERELEASE_VERSION }}`
-            Commit: ${{ github.sha }}
-            
-            This is an automated prerelease build. Use with caution.
+        run: |
+          TAG="prerelease-${PRERELEASE_VERSION}"
+          gh release create "$TAG" \
+            --title "Prerelease ${PRERELEASE_VERSION}" \
+            --prerelease \
+            --notes "Prerelease build from branch '${BRANCH_NAME}' at commit $GITHUB_SHA"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
